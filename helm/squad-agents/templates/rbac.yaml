@@ -1,0 +1,36 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: squad-agent-role
+  namespace: squad
+  labels:
+    {{- include "squad-agents.labels" . | nindent 4 }}
+rules:
+  # Agents need to create Jobs for dispatched work
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  # Read pods for status checks
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  # Read secrets (for GH_TOKEN injection)
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: squad-agent-rolebinding
+  namespace: squad
+  labels:
+    {{- include "squad-agents.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ .Values.serviceAccount.name | default "squad-agent-sa" }}
+    namespace: squad
+roleRef:
+  kind: Role
+  name: squad-agent-role
+  apiGroup: rbac.authorization.k8s.io

@@ -1,136 +1,234 @@
-# 🚀 Squad on AKS
+# Squad on AKS — AI Agent Teams on Kubernetes
 
-Deploy autonomous AI agent squads on **Azure Kubernetes Service (AKS)** and **Azure Container Apps (ACA)**.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![AKS](https://img.shields.io/badge/Azure-AKS-blue)](https://learn.microsoft.com/azure/aks/)
+[![Helm](https://img.shields.io/badge/Helm-v3-blue)](https://helm.sh)
 
-## What Is This?
+Deploy **AI agent teams** to **Azure Kubernetes Service** using Helm, with Azure-native security (Workload Identity, Key Vault), KEDA autoscaling, and GitHub Actions CI/CD.
 
-[Squad](https://github.com/tamirdresher/squad) is a framework for orchestrating teams of AI agents that collaborate on software engineering tasks — reading code, writing PRs, running tests, and monitoring work queues. This repo packages Squad for cloud deployment so your AI team runs 24/7.
+> **What is Squad?** An AI team framework where specialized agents (Lead, Frontend, Backend, Tester, Monitor) collaborate on GitHub issues. Ralph is the work monitor that polls for new issues and dispatches work. [Learn more →](docs/what-is-squad.md)
 
-## Architecture
+## 🏗️ Architecture
 
 ```
-┌─────────────────────────────────────────────┐
-│                  AKS / ACA                  │
-│                                             │
-│  ┌──────────────┐    ┌──────────────────┐   │
-│  │  Coordinator  │───▶│  Agent Pool      │   │
-│  │  (Picard)     │    │  ┌────┐ ┌────┐  │   │
-│  └──────┬───────┘    │  │Data│ │Worf│  │   │
-│         │            │  └────┘ └────┘  │   │
-│         │            │  ┌─────┐┌─────┐ │   │
-│         │            │  │Seven││Troi │ │   │
-│         │            │  └─────┘└─────┘ │   │
-│         │            └──────────────────┘   │
-│  ┌──────▼───────┐                           │
-│  │  Ralph        │  ← Persistent pod /      │
-│  │  (Work Queue) │    CronJob monitor       │
-│  └──────────────┘                           │
-│                                             │
-│  ┌──────────────┐    ┌──────────────────┐   │
-│  │  Aspire       │    │  Azure Key Vault │   │
-│  │  Dashboard    │    │  (Secrets)       │   │
-│  └──────────────┘    └──────────────────┘   │
-└─────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────┐
+│                   AKS Cluster                    │
+│                                                  │
+│  ┌──────────────┐    ┌────────────────────────┐  │
+│  │  Ralph        │    │  Agent Pods            │  │
+│  │  (CronJob)    │───▶│  (spawned on demand)   │  │
+│  │  */5 * * * *  │    │  Picard, Data, Worf... │  │
+│  └──────┬───────┘    └────────────────────────┘  │
+│         │                                        │
+│  ┌──────▼───────┐    ┌────────────────────────┐  │
+│  │  K8s Secrets  │◀───│  Key Vault CSI Driver  │  │
+│  │  (GH_TOKEN)   │    │  (Workload Identity)   │  │
+│  └──────────────┘    └────────────────────────┘  │
+│                                                  │
+│  ┌──────────────┐    ┌────────────────────────┐  │
+│  │  KEDA         │    │  Prometheus Metrics    │  │
+│  │  (autoscaler) │◀───│  (optional)            │  │
+│  └──────────────┘    └────────────────────────┘  │
+└─────────────────────────────────────────────────┘
+         │                        │
+         ▼                        ▼
+   GitHub Issues            Azure Key Vault
+   (work queue)             (secrets store)
 ```
 
-### Components
+**Key design decisions:**
+- **Ralph = CronJob** — polls every 5 min, no always-on pod, `concurrencyPolicy: Forbid` replaces mutex
+- **Agents = Jobs** — spawned on demand, terminated when done (cost efficient)
+- **Secrets via Key Vault** — Workload Identity federation, no PATs in cluster
+- **KEDA scaling** — scale-to-zero when no work, burst on demand
 
-| Component | Container | Role |
-|-----------|-----------|------|
-| **Coordinator** | `squad-coordinator` | Routes issues to agents, orchestrates multi-agent tasks |
-| **Agents** | `squad-agent-{name}` | Specialized workers (code, infra, security, docs) |
-| **Ralph** | `squad-ralph` | Persistent work queue monitor — watches ADO/GitHub for new items |
-| **Dashboard** | `squad-dashboard` | .NET Aspire dashboard for observability |
-
-## Deployment Tiers
-
-### 🆓 Tier 1: Free (ACA Free Tier)
-- Azure Container Apps free tier (180K vCPU-seconds/month)
-- Single coordinator + 2-3 agents
-- Free GitHub Copilot account for agent completions
-- **Cost: $0/month** (within free limits)
-
-### 💰 Tier 2: Scale (AKS with Spot)
-- AKS cluster with spot node pools
-- Helm chart for declarative deployment
-- KEDA auto-scaling based on issue queue depth
-- Multi-squad support (multiple repos)
-- **Cost: ~$30-80/month** (spot instances)
-
-### 🏢 Tier 3: Production
-- Azure Key Vault for secrets management
-- Managed identity authentication
-- Multi-repo, multi-squad orchestration
-- Full Aspire observability + alerting
-- **Cost: $100-300/month**
-
-## Quick Start
+## ⚡ Quick Start
 
 ### Prerequisites
-- Azure CLI (`az`)
-- Docker
-- `gh` CLI (authenticated)
-- Node.js 20+
 
-### Deploy to ACA (Free Tier)
+- Azure CLI (`az`) with an active subscription
+- `kubectl` and `helm` v3
+- A GitHub PAT with `repo`, `issues`, `workflow` scopes
 
-```bash
-# 1. Login to Azure
-az login
-
-# 2. Create environment
-./scripts/setup-aca.sh
-
-# 3. Build and deploy
-./scripts/deploy-aca.sh
-
-# 4. Verify
-./scripts/test-e2e.sh
-```
-
-### Deploy to AKS
+### 1. Create Azure Resources
 
 ```bash
-# 1. Create AKS cluster
-./scripts/setup-aks.sh
+# Set your variables
+RESOURCE_GROUP="myapp-rg"
+LOCATION="eastus"
+CLUSTER_NAME="squad-aks"
+ACR_NAME="myappsquadacr"  # must be globally unique
 
-# 2. Install via Helm
-helm install squad ./deploy/helm/squad \
-  --set github.token=$GITHUB_TOKEN \
-  --set github.org=tamirdresher
+# Create resource group
+az group create --name $RESOURCE_GROUP --location $LOCATION
 
-# 3. Verify
-kubectl get pods -n squad
+# Create AKS cluster (with security features)
+az aks create \
+  --resource-group $RESOURCE_GROUP \
+  --name $CLUSTER_NAME \
+  --node-count 1 \
+  --node-vm-size Standard_D2s_v5 \
+  --enable-managed-identity \
+  --enable-addons azure-keyvault-secrets-provider \
+  --enable-oidc-issuer \
+  --enable-workload-identity \
+  --no-ssh-key
+
+# Create container registry
+az acr create --resource-group $RESOURCE_GROUP --name $ACR_NAME --sku Basic
+
+# Attach ACR to AKS (so AKS can pull images)
+az aks update --resource-group $RESOURCE_GROUP --name $CLUSTER_NAME --attach-acr $ACR_NAME
+
+# Get cluster credentials
+az aks get-credentials --resource-group $RESOURCE_GROUP --name $CLUSTER_NAME
 ```
 
-## Project Structure
+### 2. Build and Push the Docker Image
+
+```bash
+# Option A: Build in the cloud (no local Docker needed!)
+az acr build --registry $ACR_NAME --image squad-ralph:latest --file docker/Dockerfile .
+
+# Option B: Build locally
+docker build -f docker/Dockerfile -t $ACR_NAME.azurecr.io/squad-ralph:latest .
+docker push $ACR_NAME.azurecr.io/squad-ralph:latest
+```
+
+### 3. Create Secrets
+
+```bash
+# For development: plain K8s Secret
+kubectl create namespace squad
+kubectl create secret generic squad-runtime-secrets \
+  --namespace squad \
+  --from-literal=GH_TOKEN=ghp_your_token_here
+
+# For production: use Azure Key Vault (see docs/key-vault-setup.md)
+```
+
+### 4. Deploy with Helm
+
+```bash
+helm upgrade --install squad-agents ./helm/squad-agents \
+  --namespace squad \
+  --create-namespace \
+  --set global.acrLoginServer=$ACR_NAME.azurecr.io \
+  --set global.repository=your-org/your-repo \
+  --set ralph.image.repository=squad-ralph \
+  --set ralph.image.tag=latest
+```
+
+### 5. Verify
+
+```bash
+# Check the CronJob
+kubectl get cronjobs -n squad
+
+# Manually trigger a test run
+kubectl create job ralph-test --from=cronjob/ralph -n squad
+
+# Check logs
+kubectl logs -l job-name=ralph-test -n squad --follow
+```
+
+## 📁 Repository Structure
 
 ```
 squad-on-aks/
-├── src/
-│   ├── coordinator/      # Coordinator container (Picard)
-│   ├── ralph/            # Work queue monitor container
-│   └── agent-base/       # Base image for all agents
-├── deploy/
-│   ├── aca/              # Azure Container Apps configs
-│   ├── aks/              # AKS cluster setup
-│   └── helm/squad/       # Helm chart
-├── scripts/              # Setup and deploy scripts
-├── docs/                 # Architecture docs
-└── .squad/               # Squad team configuration
+├── README.md                          # You are here
+├── helm/
+│   └── squad-agents/
+│       ├── Chart.yaml                 # Helm chart metadata
+│       ├── values.yaml                # Configuration (ACR, secrets, schedule)
+│       └── templates/
+│           ├── _helpers.tpl           # Template helpers
+│           ├── namespace.yaml         # Squad namespace
+│           ├── serviceaccount.yaml    # Workload Identity SA
+│           ├── rbac.yaml              # Agent job spawning permissions
+│           ├── secret-provider-class.yaml  # Key Vault CSI integration
+│           ├── ralph-cronjob.yaml     # Ralph work monitor
+│           └── picard-deployment.yaml # Lead agent (optional)
+├── docker/
+│   └── Dockerfile                     # Multi-stage: PowerShell 7 + Node.js + gh CLI
+├── scripts/
+│   └── ralph-watch.ps1                # Ralph's polling loop
+├── .github/
+│   └── workflows/
+│       └── deploy.yml                 # Build → Push → Deploy pipeline
+├── docs/
+│   ├── what-is-squad.md               # Squad framework overview
+│   ├── deployment-timeline.md         # Real deployment log (warts and all)
+│   ├── key-vault-setup.md             # Production secrets guide
+│   ├── keda-scaling.md                # Autoscaling with KEDA
+│   ├── aks-automatic-vs-standard.md   # AKS SKU comparison
+│   └── troubleshooting.md             # Common issues and fixes
+├── examples/
+│   ├── values-dev.yaml                # Development overrides
+│   └── values-prod.yaml               # Production overrides
+└── LICENSE
 ```
 
-## Roadmap
+## ⚠️ Warnings & Gotchas
 
-- [x] Project setup and planning
-- [ ] **Phase 1**: Free tier deployment on ACA
-- [ ] **Phase 2**: AKS scale-out with Helm + KEDA
-- [ ] **Phase 3**: Production hardening
+> **Read this before deploying.** These are real issues we hit during our first deployment.
 
-## Contributing
+### 🔴 Critical
 
-This project uses Squad itself! Issues labeled `squad` are automatically picked up by our AI agents. See [.squad/team.md](.squad/team.md) for the team configuration.
+| Issue | What Happens | Fix |
+|-------|-------------|-----|
+| **K8s label `/` in repo name** | Helm install fails with "invalid label value" | Chart uses `replace "/" "_"` — already handled |
+| **CSI driver without Key Vault** | Pod stuck in `ContainerCreating` forever | Set `global.keyVaultName=""` to skip CSI volumes |
+| **No Docker locally** | Can't build image on Azure DevBox/Codespace | Use `az acr build` for cloud builds |
+| **Enterprise VM restrictions** | AKS create fails with "VM size not allowed" | Check `az vm list-skus --location <loc>` first |
 
-## License
+### 🟡 Important
 
-MIT
+| Issue | What Happens | Fix |
+|-------|-------------|-----|
+| **AKS Automatic needs 16 vCPUs** | Creation fails on small/restricted subscriptions | Use AKS Standard with smaller VMs |
+| **Duplicate env vars in CronJob** | K8s warning about hidden definitions | Don't override SQUAD_AGENT_TYPE in `ralph.env` |
+| **ACR build uploads entire repo** | Build takes 30+ minutes with large repos | Use minimal build context or `.dockerignore` |
+| **1000+ subscriptions** | `az account list` is slow, hard to find right sub | Use `--query` filter: `az account list --query "[?contains(name,'mysubname')]"` |
+
+### 🟢 Notes
+
+- **Node selectors** are disabled by default. Uncomment in `values.yaml` when you add dedicated node pools.
+- **KEDA** is disabled by default. Enable after installing the KEDA add-on: `az aks update --enable-keda`
+- **Picard** (lead agent) is a Deployment, not a CronJob. It stays running. Disable with `picard.enabled=false` for cost savings.
+- **GH_TOKEN** needs `repo`, `issues`, `workflow` scopes minimum. For org repos, also needs `read:org`.
+
+## 📊 KEDA Autoscaling
+
+KEDA can scale Squad agents based on workload. Three approaches:
+
+| Tier | Trigger | Scaler | Effort |
+|------|---------|--------|--------|
+| **1. Queue-based** | GitHub workflow jobs pending | Built-in `github-runner` scaler | Config only |
+| **2. Rate-limit aware** | GitHub API rate limit dropping | `metrics-api` + adapter | ~30 LOC |
+| **3. Token-based** | Copilot token budget remaining | Custom external scaler (gRPC) | New project |
+
+See [docs/keda-scaling.md](docs/keda-scaling.md) for details.
+
+## 🔐 Security Model
+
+| Layer | Mechanism |
+|-------|-----------|
+| **Pod identity** | Azure Workload Identity (OIDC federation) |
+| **Secrets** | Azure Key Vault via CSI driver (no secrets in YAML) |
+| **RBAC** | Minimal Role: `batch/jobs` create + `pods/logs` read |
+| **Container** | Non-root user, dropped capabilities, read-only where possible |
+| **Network** | Private cluster option, no public ingress needed |
+| **Image** | ACR with integrated vulnerability scanning |
+
+## 🤝 Contributing
+
+Contributions welcome! This project came from a real deployment — if you hit something we didn't document, please open an issue or PR.
+
+## 📄 License
+
+MIT — see [LICENSE](LICENSE).
+
+---
+
+*Built by deploying AI agents to production with GitHub Copilot CLI. The [deployment timeline](docs/deployment-timeline.md) documents every step, failure, and fix.*

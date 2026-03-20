@@ -1,0 +1,17 @@
+apiVersion: v2
+name: squad-agents
+description: Helm chart for deploying Squad AI agents to Kubernetes
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - squad
+  - ai-agents
+  - copilot
+  - github
+home: https://github.com/tamirdresher/squad-on-aks
+sources:
+  - https://github.com/tamirdresher/squad-on-aks
+maintainers:
+  - name: Tamir Dresher
+    url: https://github.com/tamirdresher

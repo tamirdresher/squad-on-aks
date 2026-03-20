@@ -1,0 +1,68 @@
+{{- if .Values.ralph.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ralph
+  namespace: squad
+  labels:
+    {{- include "squad-agents.labels" . | nindent 4 }}
+    squad.github.com/agent: ralph
+spec:
+  schedule: {{ .Values.ralph.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "squad-agents.labels" . | nindent 8 }}
+        squad.github.com/agent: ralph
+    spec:
+      backoffLimit: {{ .Values.ralph.backoffLimit | default 0 }}
+      activeDeadlineSeconds: {{ .Values.ralph.activeDeadlineSeconds | default 240 }}
+      template:
+        metadata:
+          labels:
+            {{- include "squad-agents.labels" . | nindent 12 }}
+            squad.github.com/agent: ralph
+        spec:
+          serviceAccountName: {{ .Values.serviceAccount.name | default "squad-agent-sa" }}
+          restartPolicy: {{ .Values.ralph.restartPolicy | default "Never" }}
+          containers:
+            - name: ralph
+              image: {{ include "squad-agents.image" (dict "Values" .Values "image" .Values.ralph.image) }}
+              imagePullPolicy: {{ .Values.global.imagePullPolicy | default "IfNotPresent" }}
+              env:
+                - name: SQUAD_AGENT_TYPE
+                  value: "ralph"
+                - name: GITHUB_REPOSITORY
+                  value: {{ .Values.global.repository | quote }}
+                - name: GH_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: squad-runtime-secrets
+                      key: GH_TOKEN
+                {{- range $key, $val := .Values.ralph.env }}
+                - name: {{ $key }}
+                  value: {{ $val | quote }}
+                {{- end }}
+              resources:
+                {{- toYaml .Values.ralph.resources | nindent 16 }}
+          {{- with .Values.ralph.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.ralph.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if .Values.global.keyVaultName }}
+          volumes:
+            - name: secrets-store
+              csi:
+                driver: secrets-store.csi.k8s.io
+                readOnly: true
+                volumeAttributes:
+                  secretProviderClass: squad-secrets
+          {{- end }}
+{{- end }}

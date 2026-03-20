@@ -1,0 +1,33 @@
+# Development overrides for Squad on AKS
+# Usage: helm upgrade --install squad-agents helm/squad-agents -f examples/values-dev.yaml
+
+global:
+  repository: "your-org/your-repo"
+  acrLoginServer: "yourregistry.azurecr.io"
+  # No Key Vault in dev
+  keyVaultName: ""
+  imagePullPolicy: Always  # Always pull latest in dev
+
+ralph:
+  enabled: true
+  image:
+    repository: squad-ralph
+    tag: latest
+  schedule: "*/5 * * * *"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  env:
+    SQUAD_LOG_LEVEL: "debug"
+
+# Picard disabled in dev (save resources)
+picard:
+  enabled: false
+
+# No KEDA in dev
+keda:
+  enabled: false

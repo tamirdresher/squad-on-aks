@@ -1,0 +1,61 @@
+# Production overrides for Squad on AKS
+# Usage: helm upgrade --install squad-agents helm/squad-agents -f examples/values-prod.yaml
+
+global:
+  repository: "your-org/your-repo"
+  acrLoginServer: "yourregistry.azurecr.io"
+  keyVaultName: "squad-keyvault"
+  tenantId: "your-azure-tenant-id"
+  identityClientId: "your-managed-identity-client-id"
+  imagePullPolicy: IfNotPresent
+
+ralph:
+  enabled: true
+  image:
+    repository: squad-ralph
+    tag: "1.0.0"  # Pin to specific version in prod
+  schedule: "*/5 * * * *"
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  env:
+    SQUAD_LOG_LEVEL: "info"
+  nodeSelector:
+    squad.github.com/pool: monitor
+  tolerations:
+    - key: squad.github.com/dedicated
+      operator: Equal
+      value: monitor
+      effect: NoSchedule
+
+picard:
+  enabled: true
+  image:
+    repository: squad-picard
+    tag: "1.0.0"
+  replicas: 1
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+
+keda:
+  enabled: true
+  picard:
+    minReplicaCount: 0
+    maxReplicaCount: 5
+    pollingInterval: 60
+    cooldownPeriod: 300
+
+serviceAccount:
+  create: true
+  name: squad-agent-sa
+  annotations:
+    azure.workload.identity/client-id: "your-managed-identity-client-id"

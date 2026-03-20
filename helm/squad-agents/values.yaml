@@ -1,0 +1,93 @@
+# Squad Agents — Helm Values
+# All values are examples. Replace with your own configuration.
+
+global:
+  # Your GitHub repository (owner/repo format)
+  repository: "your-org/your-repo"
+  # ACR login server (e.g., myregistry.azurecr.io)
+  acrLoginServer: ""
+  # Azure Key Vault name (leave empty to skip CSI driver setup)
+  keyVaultName: ""
+  # Azure tenant ID (for Workload Identity)
+  tenantId: ""
+  # Managed Identity client ID (for Key Vault access)
+  identityClientId: ""
+  # Image pull policy
+  imagePullPolicy: IfNotPresent
+
+# --- Ralph (Work Monitor) ---
+ralph:
+  enabled: true
+  image:
+    repository: squad-ralph
+    tag: latest
+  schedule: "*/5 * * * *"  # Every 5 minutes
+  restartPolicy: Never
+  backoffLimit: 0
+  activeDeadlineSeconds: 240  # Kill if running > 4 min
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  env:
+    # Add any extra environment variables here
+    # GH_TOKEN is injected from the K8s secret
+    SQUAD_LOG_LEVEL: "info"
+
+  # Node selector — uncomment when you have dedicated node pools
+  # nodeSelector:
+  #   squad.github.com/pool: monitor
+
+  # Tolerations — uncomment for dedicated/tainted nodes
+  # tolerations:
+  #   - key: squad.github.com/dedicated
+  #     operator: Equal
+  #     value: monitor
+  #     effect: NoSchedule
+
+# --- Picard (Lead / Code Review) ---
+picard:
+  enabled: false  # Enable when deploying Picard agent
+  image:
+    repository: squad-picard
+    tag: latest
+  replicas: 1
+
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# --- KEDA Autoscaling ---
+keda:
+  enabled: false  # Enable after installing KEDA
+  picard:
+    minReplicaCount: 0
+    maxReplicaCount: 3
+    pollingInterval: 60
+    cooldownPeriod: 300
+
+# --- Secrets ---
+# The chart expects a K8s secret named 'squad-runtime-secrets' with:
+#   GH_TOKEN - GitHub personal access token or GitHub App token
+# Create it manually:
+#   kubectl create secret generic squad-runtime-secrets \
+#     --namespace squad \
+#     --from-literal=GH_TOKEN=ghp_your_token_here
+
+# --- Service Account ---
+serviceAccount:
+  create: true
+  name: squad-agent-sa
+  annotations: {}
+  # For Workload Identity, add:
+  # annotations:
+  #   azure.workload.identity/client-id: "<your-managed-identity-client-id>"

@@ -1,0 +1,16 @@
+# .dockerignore for ACR cloud builds
+# Prevents uploading unnecessary files when building with `az acr build`
+
+*.mp3
+*.wav
+*.png
+*.jpg
+*.pdf
+*.pptx
+node_modules/
+.git/
+.github/
+docs/
+examples/
+*.md
+!README.md
