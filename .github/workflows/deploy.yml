@@ -1,23 +1,67 @@
 name: Deploy Squad Agents
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'docker/**'
-      - 'helm/**'
-      - 'scripts/**'
   workflow_dispatch:
+    inputs:
+      acr_name:
+        description: 'Azure Container Registry name (without .azurecr.io)'
+        required: true
+        default: 'squadacr'
+      aks_cluster:
+        description: 'AKS cluster name'
+        required: true
+        default: 'squad-aks'
+      resource_group:
+        description: 'Azure resource group'
+        required: true
+        default: 'squadrg'
+      namespace:
+        description: 'Kubernetes namespace'
+        required: true
+        default: 'squad'
 
 env:
-  ACR_NAME: squadacr            # Replace with your ACR name
-  AKS_CLUSTER: squad-aks        # Replace with your cluster name
-  RESOURCE_GROUP: squadrg        # Replace with your resource group
   HELM_RELEASE: squad-agents
-  NAMESPACE: squad
 
 jobs:
+  validate-secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check required secrets
+        run: |
+          missing=()
+          if [ -z "${{ secrets.AZURE_CLIENT_ID }}" ]; then
+            missing+=("AZURE_CLIENT_ID")
+          fi
+          if [ -z "${{ secrets.AZURE_TENANT_ID }}" ]; then
+            missing+=("AZURE_TENANT_ID")
+          fi
+          if [ -z "${{ secrets.AZURE_SUBSCRIPTION_ID }}" ]; then
+            missing+=("AZURE_SUBSCRIPTION_ID")
+          fi
+
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required secrets: ${missing[*]}"
+            echo ""
+            echo "============================================"
+            echo "  SETUP REQUIRED"
+            echo "============================================"
+            echo ""
+            echo "This workflow requires Azure OIDC credentials."
+            echo "Please configure the following repository secrets:"
+            echo ""
+            for s in "${missing[@]}"; do
+              echo "  - $s"
+            done
+            echo ""
+            echo "See: https://learn.microsoft.com/en-us/azure/developer/github/connect-from-azure"
+            echo "============================================"
+            exit 1
+          fi
+          echo "All required secrets are configured."
+
   build-and-push:
+    needs: validate-secrets
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -35,7 +79,7 @@ jobs:
       - name: Build & Push to ACR
         run: |
           az acr build \
-            --registry ${{ env.ACR_NAME }} \
+            --registry ${{ inputs.acr_name }} \
             --image squad-ralph:${{ github.sha }} \
             --image squad-ralph:latest \
             --file docker/Dockerfile \
@@ -60,17 +104,17 @@ jobs:
       - name: Get AKS Credentials
         run: |
           az aks get-credentials \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --name ${{ env.AKS_CLUSTER }} \
+            --resource-group ${{ inputs.resource_group }} \
+            --name ${{ inputs.aks_cluster }} \
             --overwrite-existing
 
       - name: Helm Deploy
         run: |
           helm upgrade --install ${{ env.HELM_RELEASE }} \
             ./helm/squad-agents \
-            --namespace ${{ env.NAMESPACE }} \
+            --namespace ${{ inputs.namespace }} \
             --create-namespace \
-            --set global.acrLoginServer=${{ env.ACR_NAME }}.azurecr.io \
+            --set global.acrLoginServer=${{ inputs.acr_name }}.azurecr.io \
             --set global.repository=${{ github.repository }} \
             --set ralph.image.tag=${{ github.sha }} \
             --wait --timeout 5m
