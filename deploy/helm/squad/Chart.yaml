@@ -1,0 +1,14 @@
+apiVersion: v2
+name: squad
+description: Deploy Squad AI agent teams on Kubernetes
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - ai-agents
+  - squad
+  - copilot
+  - devops
+maintainers:
+  - name: Tamir Dresher
+    url: https://github.com/tamirdresher

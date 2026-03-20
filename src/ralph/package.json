@@ -1,0 +1,12 @@
+{
+  "name": "squad-ralph",
+  "version": "0.1.0",
+  "description": "Squad Ralph — persistent work queue monitor",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@octokit/rest": "^21.0.0"
+  }
+}

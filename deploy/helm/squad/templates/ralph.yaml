@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-ralph
+  labels:
+    app: squad-ralph
+    component: ralph
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: squad-ralph
+  template:
+    metadata:
+      labels:
+        app: squad-ralph
+        component: ralph
+    spec:
+      containers:
+        - name: ralph
+          image: "{{ .Values.image.registry }}/squad-ralph:{{ .Values.image.tag }}"
+          env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: squad-secrets
+                  key: github-token
+            - name: WATCHED_REPOS
+              value: "{{ .Values.ralph.watchedRepos }}"
+            - name: POLL_INTERVAL_MS
+              value: "{{ .Values.ralph.pollIntervalMs }}"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi

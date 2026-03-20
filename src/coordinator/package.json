@@ -1,0 +1,13 @@
+{
+  "name": "squad-coordinator",
+  "version": "0.1.0",
+  "description": "Squad coordinator — routes issues to agents",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "@octokit/rest": "^21.0.0"
+  }
+}

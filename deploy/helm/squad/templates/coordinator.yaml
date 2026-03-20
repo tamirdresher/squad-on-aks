@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-coordinator
+  labels:
+    app: squad-coordinator
+    component: coordinator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: squad-coordinator
+  template:
+    metadata:
+      labels:
+        app: squad-coordinator
+        component: coordinator
+    spec:
+      containers:
+        - name: coordinator
+          image: "{{ .Values.image.registry }}/squad-coordinator:{{ .Values.image.tag }}"
+          ports:
+            - containerPort: 3000
+          env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: squad-secrets
+                  key: github-token
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-coordinator
+spec:
+  selector:
+    app: squad-coordinator
+  ports:
+    - port: 80
+      targetPort: 3000
+  type: ClusterIP
