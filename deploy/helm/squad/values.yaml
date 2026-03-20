@@ -5,14 +5,14 @@ image:
   tag: latest
 
 github:
-  org: tamirdresher
+  org: your-org
   # token is stored in K8s secret 'squad-secrets'
 
 coordinator:
   replicas: 1
 
 ralph:
-  watchedRepos: "tamirdresher/squad-on-aks"
+  watchedRepos: "your-org/squad-on-aks"
   pollIntervalMs: "60000"
 
 agents:

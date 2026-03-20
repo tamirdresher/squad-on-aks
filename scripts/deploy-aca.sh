@@ -35,7 +35,7 @@ az containerapp create \
   --image "$REGISTRY/squad-ralph:latest" \
   --min-replicas 1 \
   --max-replicas 1 \
-  --env-vars "GITHUB_TOKEN=secretref:github-token WATCHED_REPOS=tamirdresher/squad-on-aks" \
+  --env-vars "GITHUB_TOKEN=secretref:github-token WATCHED_REPOS=your-org/squad-on-aks" \
   --output none
 
 echo "✅ Deployed! Coordinator URL:"

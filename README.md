@@ -138,17 +138,34 @@ kubectl logs -l job-name=ralph-test -n squad --follow
 squad-on-aks/
 ├── README.md                          # You are here
 ├── helm/
-│   └── squad-agents/
-│       ├── Chart.yaml                 # Helm chart metadata
-│       ├── values.yaml                # Configuration (ACR, secrets, schedule)
+│   ├── squad/                         # Core Squad chart (coordinator + Ralph Deployment)
+│   │   ├── Chart.yaml
+│   │   ├── values.yaml
+│   │   └── templates/
+│   │       ├── _helpers.tpl
+│   │       ├── configmap.yaml         # squad.config.ts + team/routing ConfigMap
+│   │       ├── deployment.yaml        # Ralph Deployment (lightweight alternative)
+│   │       ├── ralph-deployment.yaml  # Ralph Deployment (full, with emptyDir scratch)
+│   │       ├── secret.yaml            # Optional K8s Secret (use Key Vault in prod)
+│   │       └── service.yaml           # Ralph metrics/health Service
+│   └── squad-agents/                  # AKS-native chart (Ralph CronJob + Picard Deployment)
+│       ├── Chart.yaml
+│       ├── values.yaml                # ACR, Key Vault, KEDA, Workload Identity config
 │       └── templates/
-│           ├── _helpers.tpl           # Template helpers
-│           ├── namespace.yaml         # Squad namespace
-│           ├── serviceaccount.yaml    # Workload Identity SA
+│           ├── _helpers.tpl
+│           ├── namespace.yaml         # Squad namespace with Workload Identity label
+│           ├── serviceaccount.yaml    # Workload Identity ServiceAccount
 │           ├── rbac.yaml              # Agent job spawning permissions
 │           ├── secret-provider-class.yaml  # Key Vault CSI integration
-│           ├── ralph-cronjob.yaml     # Ralph work monitor
-│           └── picard-deployment.yaml # Lead agent (optional)
+│           ├── ralph-cronjob.yaml     # Ralph work monitor (CronJob)
+│           ├── picard-deployment.yaml # Lead agent Deployment + inline KEDA ScaledObject
+│           └── picard-scaledobject.yaml # Composite AND KEDA ScaledObject (Tier 2)
+├── keda/
+│   ├── github-rate-scaler.yaml        # TriggerAuthentication for GitHub API
+│   └── squad-scaledobject.yaml        # Standalone KEDA ScaledObject (3 triggers)
+├── infrastructure/
+│   ├── aks-automatic-squad.bicep      # AKS Automatic cluster + ACR + VNet + Log Analytics
+│   └── aks-automatic-squad.bicepparam # Default parameters (dev environment)
 ├── docker/
 │   └── Dockerfile                     # Multi-stage: PowerShell 7 + Node.js + gh CLI
 ├── scripts/
@@ -198,15 +215,31 @@ squad-on-aks/
 - **Picard** (lead agent) is a Deployment, not a CronJob. It stays running. Disable with `picard.enabled=false` for cost savings.
 - **GH_TOKEN** needs `repo`, `issues`, `workflow` scopes minimum. For org repos, also needs `read:org`.
 
+## 🏗️ Infrastructure as Code (Bicep)
+
+The `infrastructure/` directory contains Bicep templates for provisioning a complete AKS Automatic cluster:
+
+```bash
+# Create resource group + deploy AKS Automatic cluster with ACR, VNet, Log Analytics
+az deployment group create \
+  --resource-group squad-aks-rg \
+  --template-file infrastructure/aks-automatic-squad.bicep \
+  --parameters infrastructure/aks-automatic-squad.bicepparam
+```
+
+AKS Automatic includes KEDA built-in, managed node pools with autoscaling, and Azure RBAC integration.
+
+> **Note:** AKS Automatic requires 16+ vCPUs quota. If your subscription is limited, use AKS Standard instead (see [docs/aks-automatic-vs-standard.md](docs/aks-automatic-vs-standard.md)).
+
 ## 📊 KEDA Autoscaling
 
-KEDA can scale Squad agents based on workload. Three approaches:
+KEDA can scale Squad agents based on workload. The `keda/` directory has standalone ScaledObjects, and the Helm chart includes inline KEDA support:
 
 | Tier | Trigger | Scaler | Effort |
 |------|---------|--------|--------|
-| **1. Queue-based** | GitHub workflow jobs pending | Built-in `github-runner` scaler | Config only |
-| **2. Rate-limit aware** | GitHub API rate limit dropping | `metrics-api` + adapter | ~30 LOC |
-| **3. Token-based** | Copilot token budget remaining | Custom external scaler (gRPC) | New project |
+| **1. Queue-based** | Open GitHub issues with squad labels | Built-in `github` scaler | Config only |
+| **2. Composite AND** | Issue count AND rate-limit headroom | `github` + `metrics-api` with `scalingModifiers.formula` | Config + metrics exporter |
+| **3. Token-based** | Copilot token budget remaining | Custom Prometheus exporter | ~30 LOC |
 
 See [docs/keda-scaling.md](docs/keda-scaling.md) for details.
 

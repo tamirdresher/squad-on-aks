@@ -2,7 +2,7 @@
 # End-to-end test: create issue → verify agent picks it up → verify PR
 set -euo pipefail
 
-REPO="${REPO:-tamirdresher/squad-on-aks}"
+REPO="${REPO:-your-org/squad-on-aks}"
 
 echo "🧪 E2E Test: Issue → Agent → PR"
 

@@ -1,17 +1,26 @@
 apiVersion: v2
 name: squad-agents
-description: Helm chart for deploying Squad AI agents to Kubernetes
+description: |
+  Squad AI Agent Framework — AKS-native Helm chart.
+  Deploys Ralph (CronJob) and Picard (Deployment) with Azure Workload Identity,
+  Key Vault CSI driver integration, and KEDA-based scaling.
 type: application
 version: 0.1.0
 appVersion: "1.0.0"
 keywords:
   - squad
   - ai-agents
-  - copilot
-  - github
-home: https://github.com/tamirdresher/squad-on-aks
-sources:
-  - https://github.com/tamirdresher/squad-on-aks
+  - ralph
+  - picard
+  - aks
+  - azure
+  - workload-identity
 maintainers:
-  - name: Tamir Dresher
-    url: https://github.com/tamirdresher
+  - name: squad-team
+home: https://github.com/your-org/your-repo
+sources:
+  - https://github.com/your-org/your-repo
+annotations:
+  # Links back to the GitHub issue tracking this work
+  squad.github.com/issue: "1060"
+dependencies: []

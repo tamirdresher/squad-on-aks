@@ -44,6 +44,6 @@ Running Squad on AKS gives you:
 
 ## Learn More
 
-- [GitHub: tamirdresher/squad](https://github.com/tamirdresher/tamresearch1) — Original Squad implementation
+- [GitHub: your-org/squad](https://github.com/your-org/your-repo) — Original Squad implementation
 - [Deployment Timeline](deployment-timeline.md) — Real deployment story
 - [KEDA Scaling](keda-scaling.md) — Autoscaling strategies

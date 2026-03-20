@@ -126,7 +126,7 @@ az acr build --registry squadacr --image squad-ralph:latest --file Dockerfile bu
 First deploy failed:
 ```
 Namespace "squad" is invalid: metadata.labels: Invalid value:
-"tamirdresher_microsoft/tamresearch1": must consist of alphanumeric characters, '-', '_' or '.'
+"your-org/your-repo": must consist of alphanumeric characters, '-', '_' or '.'
 ```
 
 **Root cause:** Kubernetes label values cannot contain `/`. Our `squad.github.com/repository` label had `owner/repo` format.
