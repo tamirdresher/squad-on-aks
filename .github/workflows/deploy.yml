@@ -39,7 +39,7 @@ jobs:
             --image squad-ralph:${{ github.sha }} \
             --image squad-ralph:latest \
             --file docker/Dockerfile \
-            docker/
+            .
 
   deploy:
     needs: build-and-push

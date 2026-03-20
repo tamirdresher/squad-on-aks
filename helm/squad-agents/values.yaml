@@ -88,8 +88,9 @@ ralph:
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 1
 
-  # Restart on failure within the same Job run
-  restartPolicy: OnFailure
+  # Never restart — OnFailure causes BackOff loops in practice.
+  # Let the CronJob schedule handle retries naturally.
+  restartPolicy: Never
   backoffLimit: 2
 
   # TTL for completed Jobs (cleanup after 1 hour)
@@ -111,28 +112,32 @@ ralph:
   resources:
     limits:
       cpu: "1"
-      memory: "512Mi"
+      memory: "2Gi"    # 512Mi causes OOMKilled with Agency CLI
     requests:
-      cpu: "250m"
-      memory: "128Mi"
+      cpu: "200m"
+      memory: "256Mi"
 
-  # Pin to the monitor node pool
-  nodeSelector:
-    squad.github.com/pool: monitor
+  # Disabled by default — uncomment when using dedicated node pools
+  nodeSelector: {}
+  # nodeSelector:
+  #   squad.github.com/pool: monitor
 
-  tolerations:
-    - key: "squad.github.com/pool"
-      operator: "Equal"
-      value: "monitor"
-      effect: "NoSchedule"
+  # Disabled by default — uncomment when using dedicated node pools
+  tolerations: []
+  # tolerations:
+  #   - key: "squad.github.com/pool"
+  #     operator: "Equal"
+  #     value: "monitor"
+  #     effect: "NoSchedule"
 
   affinity: {}
 
   podAnnotations: {}
 
-  # ActiveDeadlineSeconds: kill the pod if it runs longer than 4 minutes
-  # (prevents zombie jobs if ralph-watch.ps1 hangs)
-  activeDeadlineSeconds: 240
+  # ActiveDeadlineSeconds: kill the pod if it runs longer than 30 minutes.
+  # Agency CLI rounds can take 10-20 minutes for complex issues.
+  # 240s (4 min) was too short and caused premature termination.
+  activeDeadlineSeconds: 1800
 
 # =============================================================================
 # Picard — Lead Agent (Deployment)
@@ -164,15 +169,18 @@ picard:
       cpu: "500m"
       memory: "512Mi"
 
-  # Pin to the agent node pool (can use Spot VMs)
-  nodeSelector:
-    squad.github.com/pool: agent
+  # Disabled by default — uncomment when using dedicated node pools
+  nodeSelector: {}
+  # nodeSelector:
+  #   squad.github.com/pool: agent
 
-  tolerations:
-    - key: "squad.github.com/pool"
-      operator: "Equal"
-      value: "agent"
-      effect: "NoSchedule"
+  # Disabled by default — uncomment when using dedicated node pools
+  tolerations: []
+  # tolerations:
+  #   - key: "squad.github.com/pool"
+  #     operator: "Equal"
+  #     value: "agent"
+  #     effect: "NoSchedule"
 
   affinity: {}
 

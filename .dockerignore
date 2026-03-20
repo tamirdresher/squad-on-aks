@@ -1,0 +1,13 @@
+*.mp3
+*.wav
+*.png
+*.pdf
+*.pptx
+node_modules/
+.git/
+docs/
+examples/
+infrastructure/
+keda/
+.squad/agents/
+.squad/casting/
