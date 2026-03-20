@@ -107,6 +107,8 @@ kubectl create secret generic squad-runtime-secrets \
 # For production: use Azure Key Vault (see docs/key-vault-setup.md)
 ```
 
+> **💡 Copilot CLI Auth:** The `GH_TOKEN` must belong to a user with an active GitHub Copilot license. The Agency CLI uses this token for both GitHub API access and Copilot model calls. See [docs/copilot-cli-auth.md](docs/copilot-cli-auth.md) for details.
+
 ### 4. Deploy with Helm
 
 ```bash
