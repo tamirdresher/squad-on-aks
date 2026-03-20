@@ -1,0 +1,46 @@
+name: Validate Helm Chart
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'helm/**'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Lint Helm chart
+        run: helm lint ./helm/squad-agents
+
+      - name: Template Helm chart
+        run: |
+          helm template squad-agents ./helm/squad-agents \
+            --namespace squad \
+            --set global.acrLoginServer=example.azurecr.io \
+            --set global.repository=example/squad-on-aks \
+            --set ralph.image.tag=test-sha \
+            > /dev/null
+          echo "Helm template rendered successfully"
+
+      - name: Validate YAML output
+        run: |
+          helm template squad-agents ./helm/squad-agents \
+            --namespace squad \
+            --set global.acrLoginServer=example.azurecr.io \
+            --set global.repository=example/squad-on-aks \
+            --set ralph.image.tag=test-sha \
+            | python3 -c "
+          import sys, yaml
+          docs = list(yaml.safe_load_all(sys.stdin))
+          print(f'Validated {len(docs)} Kubernetes manifests')
+          for doc in docs:
+              if doc:
+                  print(f'  - {doc.get(\"kind\", \"Unknown\")}/{doc.get(\"metadata\", {}).get(\"name\", \"unnamed\")}')
+          "
