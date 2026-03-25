@@ -37,16 +37,25 @@ Write-Log "info" "GitHub auth OK — user: $user"
 
 # Detect Copilot CLI
 $useAgency = $false
-$agencyVersion = agency --version 2>&1
-if ($LASTEXITCODE -eq 0) {
-    $useAgency = $true
-    Write-Log "info" "Agency CLI: $($agencyVersion | Select-Object -First 1)"
-} else {
-    $ghCopilot = gh copilot --version 2>&1
-    if ($LASTEXITCODE -eq 0) {
-        Write-Log "info" "gh copilot: $($ghCopilot | Select-Object -First 1)"
-    } else {
-        Write-Log "error" "No Copilot CLI found"; exit 1
+$useAgency = $false
+try {
+    $agencyBin = Get-Command agency -ErrorAction SilentlyContinue
+    if ($agencyBin) {
+        $useAgency = $true
+        Write-Log "info" "Agency CLI found at: $($agencyBin.Source)"
+    }
+} catch { }
+
+if (-not $useAgency) {
+    try {
+        $ghCopilotCheck = gh extension list 2>&1 | Select-String "copilot"
+        if ($ghCopilotCheck) {
+            Write-Log "info" "gh copilot extension found"
+        } else {
+            Write-Log "warn" "No Copilot CLI found — will use gh CLI directly"
+        }
+    } catch {
+        Write-Log "warn" "Copilot CLI detection failed — will use gh CLI directly"
     }
 }
 

@@ -52,17 +52,24 @@ try {
 # ── Detect Copilot CLI ──
 # Supports both 'agency' (internal) and 'gh copilot' (public)
 $useAgency = $false
-$agencyVersion = agency --version 2>&1
-if ($LASTEXITCODE -eq 0) {
-    $useAgency = $true
-    Write-Log "info" "Agency CLI: $($agencyVersion | Select-Object -First 1)"
-} else {
-    $ghCopilot = gh copilot --version 2>&1
-    if ($LASTEXITCODE -eq 0) {
-        Write-Log "info" "gh copilot: $($ghCopilot | Select-Object -First 1)"
-    } else {
-        Write-Log "error" "No Copilot CLI found. Install 'agency' or 'gh extension install github/gh-copilot'."
-        exit 1
+try {
+    $agencyBin = Get-Command agency -ErrorAction SilentlyContinue
+    if ($agencyBin) {
+        $useAgency = $true
+        Write-Log "info" "Agency CLI found at: $($agencyBin.Source)"
+    }
+} catch { }
+
+if (-not $useAgency) {
+    try {
+        $ghCopilotCheck = gh extension list 2>&1 | Select-String "copilot"
+        if ($ghCopilotCheck) {
+            Write-Log "info" "gh copilot extension found"
+        } else {
+            Write-Log "warn" "No Copilot CLI found — will use gh CLI directly for issue management"
+        }
+    } catch {
+        Write-Log "warn" "Copilot CLI detection failed — will use gh CLI directly"
     }
 }
 
@@ -96,28 +103,56 @@ DONE ITEMS ARCHIVING: Check for items in Done status > 3 days. Close the issue i
 BOARD RECONCILIATION: Fix mismatches between issue state and board column.
 "@
 
-# ── Run Copilot round ──
-Write-Log "info" "Starting copilot round..."
+# ── Run Ralph round ──
+Write-Log "info" "Starting Ralph round..."
 $startTime = Get-Date
 
-$promptFile = "/tmp/ralph-prompt.txt"
-[System.IO.File]::WriteAllText($promptFile, $prompt, [System.Text.Encoding]::UTF8)
-
 try {
-    $roundSessionId = [guid]::NewGuid().ToString()
-    $promptText = [System.IO.File]::ReadAllText($promptFile)
-
     if ($useAgency) {
-        # Agency CLI (internal tool — full autonomous mode)
+        # Agency CLI — full autonomous Copilot session
+        $promptFile = "/tmp/ralph-prompt.txt"
+        [System.IO.File]::WriteAllText($promptFile, $prompt, [System.Text.Encoding]::UTF8)
+        $roundSessionId = [guid]::NewGuid().ToString()
+        $promptText = [System.IO.File]::ReadAllText($promptFile)
         $output = agency copilot --yolo --no-ask-user --agent squad --model $model -p $promptText --resume=$roundSessionId 2>&1
+        $exitCode = $LASTEXITCODE
+        $output | ForEach-Object { Write-Host $_ }
+        Remove-Item $promptFile -Force -ErrorAction SilentlyContinue
     } else {
-        # gh copilot (public CLI — suggest mode)
-        $output = gh copilot suggest "$promptText" --shell 2>&1
+        # Direct gh CLI — scan issues and manage board
+        Write-Log "info" "Using gh CLI for issue management..."
+        
+        # List open unassigned issues with squad label
+        $openIssues = gh issue list --repo $repo --label "squad" --state open --json number,title,assignees --jq '.[] | select(.assignees | length == 0) | "\(.number)\t\(.title)"' 2>&1
+        if ($openIssues) {
+            Write-Log "info" "Found unassigned squad issues:"
+            $openIssues | ForEach-Object {
+                Write-Log "info" "  $_"
+                $issueNum = ($_ -split "`t")[0]
+                # Claim the issue
+                gh issue edit $issueNum --repo $repo --add-assignee "@me" 2>&1 | Out-Null
+                gh issue comment $issueNum --repo $repo --body "Ralph K8s pod $machineId claiming this issue at $(Get-Date -Format 'yyyy-MM-ddTHH:mm:ssZ')" 2>&1 | Out-Null
+                # Add in-progress label
+                gh issue edit $issueNum --repo $repo --add-label "squad-in-progress" 2>&1 | Out-Null
+                Write-Log "info" "  Claimed #$issueNum"
+            }
+        } else {
+            Write-Log "info" "No unassigned squad issues found"
+        }
+        
+        # Check for stale done items (issues closed >3 days ago still with squad label)
+        $closedIssues = gh issue list --repo $repo --label "squad-in-progress" --state closed --json number,closedAt --jq '.[].number' 2>&1
+        if ($closedIssues) {
+            $closedIssues | ForEach-Object {
+                gh issue edit $_ --repo $repo --remove-label "squad-in-progress" 2>&1 | Out-Null
+                Write-Log "info" "  Cleaned up closed issue #$_"
+            }
+        }
+        
+        $exitCode = 0
     }
-    $exitCode = $LASTEXITCODE
+    
     $duration = ((Get-Date) - $startTime).TotalSeconds
-
-    $output | ForEach-Object { Write-Host $_ }
 
     if ($exitCode -eq 0) {
         Write-Log "info" "Round completed successfully in $([math]::Round($duration, 1))s"
@@ -128,8 +163,6 @@ try {
     $duration = ((Get-Date) - $startTime).TotalSeconds
     Write-Log "error" "Round exception after $([math]::Round($duration, 1))s: $_"
     $exitCode = 1
-} finally {
-    Remove-Item $promptFile -Force -ErrorAction SilentlyContinue
 }
 
 Write-Log "info" "Ralph K8s round complete — exit=$exitCode duration=$([math]::Round($duration, 1))s"
