@@ -49,14 +49,22 @@ try {
     exit 1
 }
 
-# ── Verify Agency CLI ──
-Write-Log "info" "Checking Agency CLI..."
+# ── Detect Copilot CLI ──
+# Supports both 'agency' (internal) and 'gh copilot' (public)
+$useAgency = $false
 $agencyVersion = agency --version 2>&1
-if ($LASTEXITCODE -ne 0) {
-    Write-Log "error" "Agency CLI not found. Ensure it is installed in the container."
-    exit 1
+if ($LASTEXITCODE -eq 0) {
+    $useAgency = $true
+    Write-Log "info" "Agency CLI: $($agencyVersion | Select-Object -First 1)"
+} else {
+    $ghCopilot = gh copilot --version 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Log "info" "gh copilot: $($ghCopilot | Select-Object -First 1)"
+    } else {
+        Write-Log "error" "No Copilot CLI found. Install 'agency' or 'gh extension install github/gh-copilot'."
+        exit 1
+    }
 }
-Write-Log "info" "Agency CLI: $($agencyVersion | Select-Object -First 1)"
 
 # ── Clone repo ──
 $repoDir = "/tmp/squad-repo"
@@ -88,8 +96,8 @@ DONE ITEMS ARCHIVING: Check for items in Done status > 3 days. Close the issue i
 BOARD RECONCILIATION: Fix mismatches between issue state and board column.
 "@
 
-# ── Run Agency Copilot ──
-Write-Log "info" "Starting agency copilot round..."
+# ── Run Copilot round ──
+Write-Log "info" "Starting copilot round..."
 $startTime = Get-Date
 
 $promptFile = "/tmp/ralph-prompt.txt"
@@ -99,7 +107,13 @@ try {
     $roundSessionId = [guid]::NewGuid().ToString()
     $promptText = [System.IO.File]::ReadAllText($promptFile)
 
-    $output = agency copilot --yolo --no-ask-user --agent squad --model $model -p $promptText --resume=$roundSessionId 2>&1
+    if ($useAgency) {
+        # Agency CLI (internal tool — full autonomous mode)
+        $output = agency copilot --yolo --no-ask-user --agent squad --model $model -p $promptText --resume=$roundSessionId 2>&1
+    } else {
+        # gh copilot (public CLI — suggest mode)
+        $output = gh copilot suggest "$promptText" --shell 2>&1
+    }
     $exitCode = $LASTEXITCODE
     $duration = ((Get-Date) - $startTime).TotalSeconds
 

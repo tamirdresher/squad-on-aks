@@ -22,21 +22,23 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
 
-# Agency CLI (runs Copilot sessions)
-RUN curl -fsSL https://aka.ms/PathInstaller-linux-x64 -o /tmp/pathinstaller.tar.gz \
-    && mkdir -p /tmp/pathinstaller \
-    && tar -xzf /tmp/pathinstaller.tar.gz -C /tmp/pathinstaller \
-    && chmod +x /tmp/pathinstaller/PathInstaller \
-    && /tmp/pathinstaller/PathInstaller Install Agency \
-    && rm -rf /tmp/pathinstaller /tmp/pathinstaller.tar.gz \
-    && AGENCY_BIN=$(find / -name "agency" -type f -executable 2>/dev/null | head -1) \
-    && if [ -n "$AGENCY_BIN" ]; then ln -sf "$AGENCY_BIN" /usr/local/bin/agency; fi
+# Copilot CLI extension (runs autonomous Copilot sessions)
+# Install as root, then make available to ralph user
+RUN gh extension install github/gh-copilot 2>/dev/null || true
+
+# Optional: Agency CLI binary (copy pre-built binary if available)
+# To use: place agency-linux binary in build context, uncomment:
+# COPY agency-linux /usr/local/bin/agency
+# RUN chmod +x /usr/local/bin/agency
 
 # Non-root user
 RUN useradd -m -s /bin/bash ralph
 ENV HOME=/home/ralph
-RUN mkdir -p /home/ralph/.agency /home/ralph/.local/share/gh/extensions && \
+RUN mkdir -p /home/ralph/.local/share/gh/extensions && \
     chown -R ralph:ralph /home/ralph
+# Copy gh extensions to ralph user
+RUN cp -r /root/.local/share/gh/extensions/* /home/ralph/.local/share/gh/extensions/ 2>/dev/null || true && \
+    chown -R ralph:ralph /home/ralph/.local/share/gh/extensions
 
 WORKDIR /app
 

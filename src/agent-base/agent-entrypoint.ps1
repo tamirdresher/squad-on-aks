@@ -35,10 +35,20 @@ $user = gh api user --jq '.login' 2>&1
 if ($LASTEXITCODE -ne 0) { Write-Log "error" "GitHub auth failed: $user"; exit 1 }
 Write-Log "info" "GitHub auth OK — user: $user"
 
-# Verify agency
+# Detect Copilot CLI
+$useAgency = $false
 $agencyVersion = agency --version 2>&1
-if ($LASTEXITCODE -ne 0) { Write-Log "error" "Agency CLI not found"; exit 1 }
-Write-Log "info" "Agency CLI: $($agencyVersion | Select-Object -First 1)"
+if ($LASTEXITCODE -eq 0) {
+    $useAgency = $true
+    Write-Log "info" "Agency CLI: $($agencyVersion | Select-Object -First 1)"
+} else {
+    $ghCopilot = gh copilot --version 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Log "info" "gh copilot: $($ghCopilot | Select-Object -First 1)"
+    } else {
+        Write-Log "error" "No Copilot CLI found"; exit 1
+    }
+}
 
 # Clone repo
 $repoDir = "/tmp/squad-repo"
@@ -67,7 +77,11 @@ while ($true) {
                 $prompt = "You are a Squad agent working on issue #$issueNum in $repo. Read the issue, understand the requirements, implement the solution, create a branch squad/$issueNum, commit your changes, push, and create a PR. Be thorough and test your work."
                 
                 $sessionId = [guid]::NewGuid().ToString()
-                agency copilot --yolo --no-ask-user --agent squad --model $model -p $prompt --resume=$sessionId 2>&1 | ForEach-Object { Write-Host $_ }
+                if ($useAgency) {
+                    agency copilot --yolo --no-ask-user --agent squad --model $model -p $prompt --resume=$sessionId 2>&1 | ForEach-Object { Write-Host $_ }
+                } else {
+                    gh copilot suggest "$prompt" --shell 2>&1 | ForEach-Object { Write-Host $_ }
+                }
                 
                 if ($LASTEXITCODE -eq 0) {
                     Write-Log "info" "Issue #$issueNum completed successfully"
