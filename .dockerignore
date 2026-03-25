@@ -5,9 +5,5 @@
 *.pptx
 node_modules/
 .git/
-docs/
-examples/
-infrastructure/
-keda/
-.squad/agents/
-.squad/casting/
+.squad/orchestration-log/
+.squad/log/
