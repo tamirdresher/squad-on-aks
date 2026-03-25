@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: squad-coordinator
+  namespace: squad
+  labels:
+    app.kubernetes.io/name: coordinator
+    app.kubernetes.io/part-of: squad
+    app.kubernetes.io/component: coordinator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: coordinator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: coordinator
+        app.kubernetes.io/part-of: squad
+        azure.workload.identity/use: "true"
+    spec:
+      serviceAccountName: squad-workload-sa
+      containers:
+        - name: coordinator
+          image: <your-acr-name>.azurecr.io/squad-coordinator:latest
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: SQUAD_AGENT_TYPE
+              value: coordinator
+            - name: GH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: squad-kv-secrets
+                  key: gh-token
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          volumeMounts:
+            - name: secrets-store
+              mountPath: /mnt/secrets-store
+              readOnly: true
+      volumes:
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: squad-keyvault-sync

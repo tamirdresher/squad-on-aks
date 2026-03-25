@@ -178,7 +178,80 @@ CronJob deployed, secrets configured, pods scheduling. Ralph is alive on AKS.
 
 ---
 
-## Total Time
+## Session: March 25, 2026
+
+### Identity Overhaul — Zero-Secrets Architecture
+
+Replaced the manually-created Kubernetes Secret (which held the GitHub token and bot password as plain base64) with a full Workload Identity + Key Vault + CSI pipeline. After this session, **zero credentials exist in the cluster**.
+
+### MSI + Federated Identity Credential (FIC)
+
+Created User-Assigned Managed Identity `msi-squad-agents` and configured a Federated Identity Credential:
+
+- **Issuer**: AKS cluster's OIDC issuer URL
+- **Subject**: `system:serviceaccount:squad:squad-workload-sa`
+- **Audience**: `api://AzureADTokenExchange`
+
+This tells Azure AD: "trust tokens from our AKS cluster's OIDC issuer when they claim to be the `squad-workload-sa` service account."
+
+### Key Vault + CSI Wiring
+
+Created Key Vault `kv-squad-agents` with Azure RBAC auth. Moved secrets out of Kubernetes:
+
+| Secret | Was | Now |
+|--------|-----|-----|
+| `gh-token` | K8s Secret (base64) | Key Vault → CSI → K8s Secret (auto-synced) |
+| `dk8s-autobot-password` | K8s Secret (base64) | Key Vault → CSI → K8s Secret (auto-synced) |
+
+`SecretProviderClass` syncs Key Vault secrets into `squad-kv-secrets` K8s Secret on pod mount.
+
+### Workload Identity on All 3 Pods
+
+Updated all three workloads to use the same service account with Workload Identity:
+
+| Workload | Type | Status |
+|----------|------|--------|
+| `squad-coordinator` | Deployment | ✅ Workload Identity |
+| `squad-agent` | Deployment | ✅ Workload Identity |
+| `ralph` | CronJob | ✅ Workload Identity |
+
+Each pod gets:
+- ServiceAccount `squad-workload-sa` with MSI client ID annotation
+- Label `azure.workload.identity/use: "true"` (triggers mutating webhook)
+- CSI volume mount at `/mnt/secrets-store`
+
+### Teams Messaging via ROPC
+
+Configured the bot account (`DK8S Bot`) to send Teams messages:
+
+1. Bot password stored in Key Vault
+2. Pod retrieves password via CSI mount
+3. ROPC flow using Microsoft Office app ID (`d3590ed6-...`) exchanges password for delegated Graph token
+4. Graph API call sends message to Teams channel as the bot user
+
+No custom app registration needed. No admin consent. Messages appear as "DK8S Bot" in the channel.
+
+### Old K8s Secret Deleted
+
+```bash
+kubectl delete secret squad-secrets -n squad
+# Gone. No more base64-encoded credentials in the cluster.
+```
+
+**Before:** Credentials in git (Helm values) → base64-encoded K8s Secret → mounted in pods.
+**After:** Key Vault (RBAC-protected) → CSI driver (Workload Identity) → ephemeral K8s Secret → mounted in pods.
+
+### Lessons
+
+1. **FIC subject must match exactly** — `system:serviceaccount:{namespace}:{sa-name}`. A typo means silent auth failure.
+2. **CSI driver must be enabled on the cluster** — `az aks enable-addons --addons azure-keyvault-secrets-provider`
+3. **Workload Identity needs the OIDC issuer enabled** — `az aks update --enable-oidc-issuer --enable-workload-identity`
+4. **ROPC won't work with MFA** — exclude the bot account from Conditional Access MFA policies.
+5. **Key Vault RBAC vs. Access Policies** — use RBAC. Access policies are legacy and harder to manage.
+
+---
+
+## Session: March 20 — Total Time
 
 | Phase | Duration |
 |-------|----------|
