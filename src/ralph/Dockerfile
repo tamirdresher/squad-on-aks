@@ -18,5 +18,10 @@ COPY . .
 ENV NODE_ENV=production
 ENV SQUAD_ROLE=ralph
 
-# Ralph runs as a long-lived process — no port needed
+# Health endpoint for K8s liveness probes
+EXPOSE 3001
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+  CMD curl -f http://localhost:3001/health || exit 1
+
 CMD ["node", "src/index.js"]
